@@ -10,14 +10,17 @@ import sys
 
 # potremmo eventualmente creare una seconda socket 
 
+print "[INFO] Lazy VRRP started on this device"
+
 ''' Set of parameters '''
 INTERFACE_NAME = sys.argv[1] + "-eth1"
 INTERFACE_IP = ni.ifaddresses(INTERFACE_NAME)[ni.AF_INET][0]["addr"]
 BROADCAST_ADDRESS = "10.0.2.255"
+VRIP = "10.0.2.254"
 COMM_PORT = 8888
-ROUTER_STATE = 0        # 0: no-state, 1: backup, 2: master
-WAITING_TIME = 3.0        # in real cases WAITING_TIME must be about 1 ms (0.001)
-VRID = int(sys.argv[2]) # router id must be beetwen 1-255
+ROUTER_STATE = 0            # 0: no-state, 1: backup, 2: master
+WAITING_TIME = 0.001          # in real cases WAITING_TIME must be about 1 ms (0.001)
+VRID = int(sys.argv[2])     # router id must be beetwen 1-255
 
 ''' Start configuration '''
 print "[INFO]"
@@ -40,16 +43,15 @@ print "[INFO] Packet sent to %s throught port %s" %(BROADCAST_ADDRESS, COMM_PORT
 
 ''' Router selection '''
 try:
-    sock.settimeout(4)
+    sock.settimeout(10)
     while True:
         data, addr = sock.recvfrom(1024)    # verifico che gli altri nodi siano attivi
-        if addr[0] != INTERFACE_IP and addr[0] != BROADCAST_ADDRESS:
+        if addr[0] == VRIP:
             break;
 except:
-    print "[WARN] I am the only router up"
-    sock.sendto(str(0), (BROADCAST_ADDRESS, COMM_PORT))
-finally:
-    sock.settimeout(None)
+    print "[ERR] Controller is offline"
+    sock.close()
+    exit()
 
 print "[INFO] Election terminated"
 
@@ -76,13 +78,11 @@ while True:
     if ROUTER_STATE == 1:                       # I am waiting for my colleague router goes down
         
         print "[INFO] I am the virtual backup router"
-        print "VRID: ", VRID
-
         sock.setblocking(1)
         
         while True:
             data, addr = sock.recvfrom(1024) 
-            if VRID == int(data) and addr[0] != INTERFACE_IP:
+            if addr[0] == VRIP and VRID == int(data):
                 ROUTER_STATE = 2
                 break;
         
@@ -95,13 +95,15 @@ while True:
         
             sock.sendto(str(VRID), (BROADCAST_ADDRESS, COMM_PORT));
             print "[INFO] VRRP advertisement sent to (%s, %d)" %(BROADCAST_ADDRESS, COMM_PORT)
-            print "VRID: ", VRID
             
-            time.sleep(WAITING_TIME)
             data, addr = sock.recvfrom(1024)
-            if VRID < int(data):
+            
+            if addr[0] == VRIP and VRID < int(data):
+                # print "Ho ricevuto un pacchetto con ", int(data) , " da: ", addr
                 ROUTER_STATE = 1
                 break;
+            
+            time.sleep(WAITING_TIME)
             
         
     else:                                       # OMG, What did it happen here?

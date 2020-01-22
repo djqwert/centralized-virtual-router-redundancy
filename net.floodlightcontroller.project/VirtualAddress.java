@@ -52,11 +52,6 @@ public class VirtualAddress implements IFloodlightModule, IOFMessageListener {
 	private final static IPv4Address ROUTER1 = IPv4Address.of("10.0.2.1");
 	private final static IPv4Address ROUTER2 = IPv4Address.of("10.0.2.2");
 	
-	private final static IPv4Address VRIP = IPv4Address.of("10.0.2.254");
-	private final static MacAddress VRMAC = MacAddress.of("00:00:E5:00:01:01");
-	private final static IPv4Address SUBNET = IPv4Address.of("10.0.2.0");
-	private final static IPv4Address NETMASK = IPv4Address.of("255.255.255.0");
-	
 	// Rule timeouts
 		private final static short IDLE_TIMEOUT = 10; // in seconds
 		private final static short HARD_TIMEOUT = 20; // every 20 seconds drop the entry
@@ -151,9 +146,12 @@ public class VirtualAddress implements IFloodlightModule, IOFMessageListener {
 					IPv4Address targetIP = ip_pkt.getDestinationAddress();
 					logger.info("Preprocessing IPv4 packet coming from " + senderIP + " directed to " + targetIP);
 					
-					if(ip_pkt.getDestinationAddress().applyMask(NETMASK).compareTo(SUBNET) != 0){
+					if(ip_pkt.getDestinationAddress().applyMask(Parameters.NETMASK).compareTo(Parameters.SUBNET) != 0){
 						
-						handleIPPacket(sw, pi, cntx);
+						if(Parameters.MRID == -1) 
+							handleIPErrPacket(sw, pi, cntx);
+						else
+							handleIPPacket(sw, pi, cntx);
 						
 						// Interrupt the chain
 						return Command.STOP;
@@ -184,14 +182,14 @@ public class VirtualAddress implements IFloodlightModule, IOFMessageListener {
 		IPv4Address senderIP = arpRequest.getSenderProtocolAddress();
 		IPv4Address targetIP = arpRequest.getTargetProtocolAddress();
 		logger.info("Processing ARP packet coming from " + senderIP + " directed to " + targetIP);
-		if(targetIP.compareTo(VRIP) != 0 && targetIP.applyMask(NETMASK).compareTo(SUBNET) == 0) {
+		if(targetIP.compareTo(Parameters.VRIP) != 0 && targetIP.applyMask(Parameters.NETMASK).compareTo(Parameters.SUBNET) == 0) {
 			logger.info("ARP request not modified because the target node is inside the network");
 			return;
 		}
 				
 		// Generate ARP reply
 		IPacket arpReply = new Ethernet()		// Il nodo si comporta come se fosse il nodo e rispondesse all'host che gli ha fatto richiesta
-			.setSourceMACAddress(VRMAC)
+			.setSourceMACAddress(Parameters.VRMAC)
 			.setDestinationMACAddress(eth.getSourceMACAddress())
 			.setEtherType(EthType.ARP)
 			.setPriorityCode(eth.getPriorityCode())
@@ -202,8 +200,8 @@ public class VirtualAddress implements IFloodlightModule, IOFMessageListener {
 				.setHardwareAddressLength((byte) 6)
 				.setProtocolAddressLength((byte) 4)
 				.setOpCode(ARP.OP_REPLY)
-				.setSenderHardwareAddress(VRMAC) 	// Set my MAC address
-				.setSenderProtocolAddress(VRIP) 	// Set my IP address
+				.setSenderHardwareAddress(Parameters.VRMAC) 	// Set my MAC address
+				.setSenderProtocolAddress(Parameters.VRIP) 	// Set my IP address
 				.setTargetHardwareAddress(arpRequest.getSenderHardwareAddress())	// Setto il MAC dell'host
 				.setTargetProtocolAddress(arpRequest.getSenderProtocolAddress()));	// Setto l'ip dell'host che ha fatto richiesta
 		
@@ -225,7 +223,7 @@ public class VirtualAddress implements IFloodlightModule, IOFMessageListener {
 		byte[] packetData = arpReply.serialize();
 		pob.setData(packetData);
 		
-		logger.info("Sending out ARP reply with IP address " + VRIP + " and MAC address " + VRMAC + " to " + senderIP);
+		logger.info("Sending out ARP reply with IP address " + Parameters.VRIP + " and MAC address " + Parameters.VRMAC + " to " + senderIP);
 		
 		sw.write(pob.build());
 		
@@ -233,7 +231,7 @@ public class VirtualAddress implements IFloodlightModule, IOFMessageListener {
 
 	private void handleIPPacket(IOFSwitch sw, OFPacketIn pi,
 			FloodlightContext cntx) {
-
+		
 		// Double check that the payload is IPv4
 		Ethernet eth = IFloodlightProviderService.bcStore.get(cntx,
 				IFloodlightProviderService.CONTEXT_PI_PAYLOAD);
@@ -252,7 +250,7 @@ public class VirtualAddress implements IFloodlightModule, IOFMessageListener {
 		IPv4Address senderIP = ipv4.getSourceAddress();
 		IPv4Address targetIP = ipv4.getDestinationAddress();
 		logger.info("Processing IPv4 packet coming from " + senderIP + " directed to " + targetIP);
-		if(targetIP.compareTo(ROUTER1) == 0 || targetIP.compareTo(ROUTER2) == 0) {
+		if(targetIP.compareTo(Parameters.ROUTER_IP[0]) == 0 || targetIP.compareTo(Parameters.ROUTER_IP[1]) == 0) {
 			logger.info("IP message not modified because the sender is a router");
 			return;
 		}
@@ -272,7 +270,7 @@ public class VirtualAddress implements IFloodlightModule, IOFMessageListener {
         // Create the match structure  
         Match.Builder mb = sw.getOFFactory().buildMatch();
         mb.setExact(MatchField.ETH_TYPE, EthType.IPv4).
-        	setExact(MatchField.ETH_DST, VRMAC);
+        	setExact(MatchField.ETH_DST, Parameters.VRMAC);
         
         OFActions actions = sw.getOFFactory().actions();
         
@@ -284,7 +282,7 @@ public class VirtualAddress implements IFloodlightModule, IOFMessageListener {
         OFActionSetField setDlDst = actions.buildSetField()
         	    .setField(
         	        oxms.buildEthDst()
-        	        .setValue(MACROUTER1)
+        	        .setValue(Parameters.ROUTER_MAC[Parameters.MRID])
         	        .build()
         	    )
         	    .build();
@@ -292,7 +290,7 @@ public class VirtualAddress implements IFloodlightModule, IOFMessageListener {
         
         OFActionOutput output = actions.buildOutput()
         	    .setMaxLen(0xFFffFFff)
-        	    .setPort(OFPort.of(4))
+        	    .setPort(Parameters.SWITCH_PORT[Parameters.MRID])
         	    .build();
         actionList.add(output);
         
@@ -314,15 +312,15 @@ public class VirtualAddress implements IFloodlightModule, IOFMessageListener {
 		fmbRev.setPriority(FlowModUtils.PRIORITY_MAX);
 
         Match.Builder mbRev = sw.getOFFactory().buildMatch();
-        mbRev.setExact(MatchField.ETH_TYPE, EthType.IPv4)
-        .setExact(MatchField.ETH_SRC, MACROUTER2);
+        mbRev.setExact(MatchField.ETH_TYPE, EthType.IPv4);
+        // .setExact(MatchField.ETH_SRC, Parameters.ROUTER_MAC[1]);
         
         ArrayList<OFAction> actionListRev = new ArrayList<OFAction>();
         
         OFActionSetField setDlDstRev = actions.buildSetField()
         	    .setField(
         	        oxms.buildEthSrc()
-        	        .setValue(VRMAC)
+        	        .setValue(Parameters.VRMAC)
         	        .build()
         	    )
         	    .build();
@@ -360,51 +358,16 @@ public class VirtualAddress implements IFloodlightModule, IOFMessageListener {
 				
 		sw.write(pob.build());
 		
-		logger.info("Sending out IP reply with IP address " + senderIP + " to " + targetIP);
+		logger.info("Sending out IP reply with IP address " + senderIP + " to " + targetIP + " throught " + Parameters.ROUTER[Parameters.MRID]);
              
-/*
-		// Cast to ICMP packet
-		ICMP icmpRequest = (ICMP) ipv4.getPayload();
-			
-		// Generate ICMP reply
-		IPacket icmpReply = new Ethernet()
-			.setSourceMACAddress(eth.getSourceMACAddress())
-			.setDestinationMACAddress(MACROUTER1)
-			.setEtherType(EthType.IPv4)
-			.setPriorityCode(eth.getPriorityCode())
-			.setPayload(
-				new IPv4()
-				.setProtocol(IpProtocol.ICMP)
-				.setDestinationAddress(ipv4.getDestinationAddress())
-				.setSourceAddress(ipv4.getSourceAddress())
-				.setTtl((byte)64)
-				.setProtocol(IpProtocol.IPv4)
-				// Set the same payload included in the request
-				.setPayload(ipv4.getPayload())
-				);
-		
-		// Create the Packet-Out and set basic data for it (buffer id and in port)
-		OFPacketOut.Builder pob = sw.getOFFactory().buildPacketOut();
-		pob.setBufferId(OFBufferId.NO_BUFFER);
-		pob.setInPort(OFPort.ANY);
-		
-		// Create action -> send the packet back from the source port
-		OFActionOutput.Builder actionBuilder = sw.getOFFactory().actions().buildOutput();
-		// The method to retrieve the InPort depends on the protocol version 
-		OFPort inPort = pi.getMatch().get(MatchField.IN_PORT);
-		actionBuilder.setPort(inPort); 
-		
-		// Assign the action
-		pob.setActions(Collections.singletonList((OFAction) actionBuilder.build()));
-		
-		// Set the ICMP reply as packet data 
-		byte[] packetData = icmpReply.serialize();
-		pob.setData(packetData);
-		sw.write(pob.build());
-		*/
-		
-		
-		
 	}
 
+	private void handleIPErrPacket(IOFSwitch sw, OFPacketIn pi, FloodlightContext cntx) {
+		
+		logger.info("No Master Router selected");
+		
+		// Bisogna creare un messaggio di risposta di errore al client
+		
+	}
+	
 }
