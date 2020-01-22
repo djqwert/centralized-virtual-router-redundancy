@@ -46,17 +46,10 @@ public class VirtualAddress implements IFloodlightModule, IOFMessageListener {
 	
 	protected IFloodlightProviderService floodlightProvider; // Reference to the provider
 	
-	// IP and MAC address for our logical load balancer
-	private final static MacAddress MACROUTER1 = MacAddress.of("00:00:00:00:00:01");
-	private final static MacAddress MACROUTER2 = MacAddress.of("00:00:00:00:00:02");
-	private final static IPv4Address ROUTER1 = IPv4Address.of("10.0.2.1");
-	private final static IPv4Address ROUTER2 = IPv4Address.of("10.0.2.2");
-	
 	// Rule timeouts
-		private final static short IDLE_TIMEOUT = 10; // in seconds
-		private final static short HARD_TIMEOUT = 20; // every 20 seconds drop the entry
-	
-	
+	private final static short IDLE_TIMEOUT = 5;
+	private final static short HARD_TIMEOUT = 0;
+
 	private static final Logger logger = LoggerFactory.getLogger(VirtualAddress.class);
 
 	@Override
@@ -265,16 +258,16 @@ public class VirtualAddress implements IFloodlightModule, IOFMessageListener {
         fmb.setBufferId(OFBufferId.NO_BUFFER);
         fmb.setOutPort(OFPort.ANY);
         fmb.setCookie(U64.of(0));
-        fmb.setPriority(FlowModUtils.PRIORITY_MAX);
+        fmb.setPriority(FlowModUtils.PRIORITY_MAX - 1);
 
         // Create the match structure  
         Match.Builder mb = sw.getOFFactory().buildMatch();
-        mb.setExact(MatchField.ETH_TYPE, EthType.IPv4).
-        	setExact(MatchField.ETH_DST, Parameters.VRMAC);
-        
-        OFActions actions = sw.getOFFactory().actions();
+        mb.setExact(MatchField.ETH_TYPE, EthType.IPv4)
+        	.setExact(MatchField.ETH_DST, Parameters.VRMAC);
         
         // Create the actions (Change DST mac and IP addresses and set the out-port)
+        OFActions actions = sw.getOFFactory().actions();
+        
         ArrayList<OFAction> actionList = new ArrayList<OFAction>();
         
         OFOxms oxms = sw.getOFFactory().oxms();
@@ -309,11 +302,11 @@ public class VirtualAddress implements IFloodlightModule, IOFMessageListener {
 		fmbRev.setBufferId(OFBufferId.NO_BUFFER);
 		fmbRev.setOutPort(OFPort.CONTROLLER);
 		fmbRev.setCookie(U64.of(0));
-		fmbRev.setPriority(FlowModUtils.PRIORITY_MAX);
+		fmbRev.setPriority(FlowModUtils.PRIORITY_MAX - 1);
 
         Match.Builder mbRev = sw.getOFFactory().buildMatch();
-        mbRev.setExact(MatchField.ETH_TYPE, EthType.IPv4);
-        // .setExact(MatchField.ETH_SRC, Parameters.ROUTER_MAC[1]);
+        mbRev.setExact(MatchField.ETH_TYPE, EthType.IPv4)
+        .setExact(MatchField.IP_PROTO, IpProtocol.ICMP);
         
         ArrayList<OFAction> actionListRev = new ArrayList<OFAction>();
         

@@ -14,9 +14,11 @@ import org.projectfloodlight.openflow.protocol.OFPacketOut;
 import org.projectfloodlight.openflow.protocol.OFType;
 import org.projectfloodlight.openflow.protocol.action.OFAction;
 import org.projectfloodlight.openflow.protocol.action.OFActionOutput;
+import org.projectfloodlight.openflow.protocol.action.OFActionSetField;
 import org.projectfloodlight.openflow.protocol.action.OFActions;
 import org.projectfloodlight.openflow.protocol.match.Match;
 import org.projectfloodlight.openflow.protocol.match.MatchField;
+import org.projectfloodlight.openflow.protocol.oxm.OFOxms;
 import org.projectfloodlight.openflow.types.EthType;
 import org.projectfloodlight.openflow.types.IPv4Address;
 import org.projectfloodlight.openflow.types.IpProtocol;
@@ -52,8 +54,8 @@ public class VREController implements IFloodlightModule, IOFMessageListener {
 	private static int[] VRID = new int[] {-1,-1};
 	
 	// Rule timeouts
-	private final static short IDLE_TIMEOUT = 10; // in seconds
-	private final static short HARD_TIMEOUT = 20; // every 20 seconds drop the entry
+	private final static short IDLE_TIMEOUT = 1; // after a second if a dont receive a packet
+	private final static short HARD_TIMEOUT = 0; // never
 	
 	protected static Timer timer = null;
 	TimerTask task = null;
@@ -204,6 +206,81 @@ public class VREController implements IFloodlightModule, IOFMessageListener {
 		task = new newElection();
 		timer.schedule(task, Parameters.TIMEOUT);
 		
+		/*Match.Builder mb = sw.getOFFactory().buildMatch();
+        mb.setExact(MatchField.ETH_TYPE, EthType.IPv4)
+        	.setExact(MatchField.IPV4_DST, Parameters.BROADCAST)
+        	.setExact(MatchField.IP_PROTO, IpProtocol.UDP)
+        	.setExact(MatchField.UDP_DST, Parameters.PROTO_PORT);*/
+		
+        /* AZIONI */ 
+        ArrayList<OFAction> actionList = new ArrayList<OFAction>();      // una action list vuota fa droppare il pacchetto dallo switch
+        
+        OFActions actions = sw.getOFFactory().actions();
+        
+        OFOxms oxms = sw.getOFFactory().oxms();
+
+        /*OFActionSetField setDlDst = actions.buildSetField()
+        	    .setField(
+        	        oxms.buildEthDst()
+        	        .setValue(MacAddress.of("ff:ff:ff:ff:ff:ff"))
+        	        .build()
+        	    )
+        	    .build();
+        actionList.add(setDlDst);
+        
+        OFActionSetField setNwDst = actions.buildSetField()
+        	    .setField(
+        	        oxms.buildIpv4Dst()
+        	        .setValue(IPv4Address.of("127.0.0.1"))
+        	        .build()
+        	    )
+        	    .build();
+        actionList.add(setNwDst);
+        
+        OFActionOutput output = actions.buildOutput()
+        	    .setMaxLen(0xFFffFFff)
+        	    .setPort(OFPort.CONTROLLER)
+        	    .build();
+        actionList.add(output);*/
+        
+        /*OFFlowAdd.Builder flow = sw.getOFFactory().buildFlowAdd();
+		
+        flow.setIdleTimeout(IDLE_TIMEOUT);
+        flow.setHardTimeout(HARD_TIMEOUT);
+        flow.setBufferId(OFBufferId.NO_BUFFER);
+        flow.setOutPort(OFPort.ZERO);
+        flow.setCookie(U64.of(0));
+        flow.setPriority(FlowModUtils.PRIORITY_MAX);
+        
+        flow.setActions(actionList);
+        flow.setMatch(mb.build());
+        
+        sw.write(flow.build());*/
+        
+        OFPacketIn pi = (OFPacketIn) msg;
+        OFPacketOut.Builder pob = sw.getOFFactory().buildPacketOut();
+		pob.setBufferId(pi.getBufferId());
+		pob.setInPort(OFPort.ANY);
+		
+		OFActionOutput output = actions.buildOutput()
+        	    .setMaxLen(0xFFffFFff)
+        	    .setPort(Parameters.SWITCH_PORT[0])
+        	    .build();
+        actionList.add(output);
+		
+		pob.setActions(actionList);
+		
+		// Packet might be buffered in the switch or encapsulated in Packet-In 
+		// If the packet is encapsulated in Packet-In sent it back
+		/*if (pi.getBufferId() == OFBufferId.NO_BUFFER) {
+			// Packet-In buffer-id is none, the packet is encapsulated -> send it back
+            byte[] packetData = pi.getData();
+            pob.setData(packetData);
+            
+		} */
+				
+		sw.write(pob.build());
+		
 	}
 	
 	private void handleVRID(IOFSwitch sw, OFMessage msg, UDP udp, IPv4Address senderIP) {
@@ -261,7 +338,7 @@ public class VREController implements IFloodlightModule, IOFMessageListener {
 		// Creo il pacchetto di risposta per entrambi i router
 		IPacket electionAdvertisement = new Ethernet()
 				.setSourceMACAddress(Parameters.VRMAC)
-				.setDestinationMACAddress("ff:ff:ff:ff:ff:ff")
+				.setDestinationMACAddress(MacAddress.of("ff:ff:ff:ff:ff:ff"))
 				.setEtherType(EthType.IPv4)
 				.setPriorityCode((byte) 0)
 				.setPayload(
@@ -284,15 +361,23 @@ public class VREController implements IFloodlightModule, IOFMessageListener {
 		OFPacketOut.Builder pob = sw.getOFFactory().buildPacketOut();
 		pob.setBufferId(OFBufferId.NO_BUFFER);
 		pob.setInPort(OFPort.ANY);
-		
-		// Create action -> send the packet back from the source port
-		OFActionOutput.Builder actionBuilder = sw.getOFFactory().actions().buildOutput();
-		
-		// The method to retrieve the InPort depends on the protocol version 
-		actionBuilder.setPort(OFPort.FLOOD);
-		
-		// Assign the action
-		pob.setActions(Collections.singletonList((OFAction) actionBuilder.build()));
+	
+        ArrayList<OFAction> actionList = new ArrayList<OFAction>();
+        OFActions actions = sw.getOFFactory().actions();
+        
+        // La risposta viene propagata solamente sulle linee dei due router
+        OFActionOutput output1 = actions.buildOutput()
+        	    .setMaxLen(0xFFffFFff)
+        	    .setPort(Parameters.SWITCH_PORT[0])
+        	    .build();
+        actionList.add(output1);
+        OFActionOutput output2 = actions.buildOutput()
+        	    .setMaxLen(0xFFffFFff)
+        	    .setPort(Parameters.SWITCH_PORT[1])
+        	    .build();
+        actionList.add(output2);
+        
+		pob.setActions(actionList);
 		
 		// Set the ICMP reply as packet data 
 		byte[] packetData = electionAdvertisement.serialize();

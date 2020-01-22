@@ -19,7 +19,7 @@ BROADCAST_ADDRESS = "10.0.2.255"
 VRIP = "10.0.2.254"
 COMM_PORT = 8888
 ROUTER_STATE = 0            # 0: no-state, 1: backup, 2: master
-WAITING_TIME = 0.001          # in real cases WAITING_TIME must be about 1 ms (0.001)
+WAITING_TIME = 0.5          # in real cases WAITING_TIME must be about 1 ms (0.001)
 VRID = int(sys.argv[2])     # router id must be beetwen 1-255
 
 ''' Start configuration '''

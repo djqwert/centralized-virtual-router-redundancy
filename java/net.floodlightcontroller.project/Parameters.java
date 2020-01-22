@@ -38,6 +38,6 @@ public class Parameters {
 	
 	public static int MRID = -1;
 	public static int BRID = -1;
-	public static int TIMEOUT = 10000;
+	public static int TIMEOUT = 1500; // expressed in seconds (1000 = 1 sec)
 	
 }
