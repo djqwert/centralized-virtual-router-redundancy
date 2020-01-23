@@ -28,10 +28,19 @@ public class Parameters {
 			IPv4Address.of("10.0.2.1"),
 			IPv4Address.of("10.0.2.2")
 	};
+	
+	final static IPv4Address[] HOST_IP = {
+			IPv4Address.of("10.0.2.3"),
+			IPv4Address.of("10.0.2.4"),
+			IPv4Address.of("10.0.2.5")
+	};
 		
 	final static OFPort[] SWITCH_PORT = {
 			OFPort.of(4),
-			OFPort.of(5)
+			OFPort.of(5),
+			OFPort.of(1),
+			OFPort.of(2),
+			OFPort.of(3)			
 	};
 	
 	public final static TransportPort PROTO_PORT = TransportPort.of(8888);

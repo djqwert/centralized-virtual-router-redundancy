@@ -120,106 +120,29 @@ public class VirtualAddress implements IFloodlightModule, IOFMessageListener {
 			OFPacketIn pi = (OFPacketIn) msg;
 
 	        // Dissect Packet included in Packet-In
-			if (eth.isBroadcast() || eth.isMulticast()) {
-				if (pkt instanceof ARP) {
+			if (pkt instanceof IPv4) {
+				
+				IPv4 ip_pkt = (IPv4) pkt;
+				
+				IPv4Address senderIP = ip_pkt.getSourceAddress();
+				IPv4Address targetIP = ip_pkt.getDestinationAddress();
+				logger.info("Preprocessing IPv4 packet coming from " + senderIP + " directed to " + targetIP);
+				
+				if(ip_pkt.getDestinationAddress().applyMask(Parameters.NETMASK).compareTo(Parameters.SUBNET) != 0){
 					
-					// Process ARP request
-					handleARPRequest(sw, pi, cntx);
+					if(Parameters.MRID == -1) 
+						handleIPErrPacket(sw, pi, cntx);
+					else
+						handleIPPacket(sw, pi, cntx);
 					
 					// Interrupt the chain
 					return Command.STOP;
-				}
-				
-			} else {
-				if (pkt instanceof IPv4) {
-					
-					IPv4 ip_pkt = (IPv4) pkt;
-					
-					IPv4Address senderIP = ip_pkt.getSourceAddress();
-					IPv4Address targetIP = ip_pkt.getDestinationAddress();
-					logger.info("Preprocessing IPv4 packet coming from " + senderIP + " directed to " + targetIP);
-					
-					if(ip_pkt.getDestinationAddress().applyMask(Parameters.NETMASK).compareTo(Parameters.SUBNET) != 0){
-						
-						if(Parameters.MRID == -1) 
-							handleIPErrPacket(sw, pi, cntx);
-						else
-							handleIPPacket(sw, pi, cntx);
-						
-						// Interrupt the chain
-						return Command.STOP;
-					}
 				}
 			}
 			
 			// Interrupt the chain
 			return Command.CONTINUE;
 
-	}
-	
-	
-	private void handleARPRequest(IOFSwitch sw, OFPacketIn pi,
-			FloodlightContext cntx) {
-
-		// Double check that the payload is ARP
-		Ethernet eth = IFloodlightProviderService.bcStore.get(cntx,
-				IFloodlightProviderService.CONTEXT_PI_PAYLOAD);
-		
-		if (! (eth.getPayload() instanceof ARP))
-			return;
-		
-		// Cast the ARP request
-		ARP arpRequest = (ARP) eth.getPayload();
-		
-		// Devo gestire solo le richieste dirette verso il router
-		IPv4Address senderIP = arpRequest.getSenderProtocolAddress();
-		IPv4Address targetIP = arpRequest.getTargetProtocolAddress();
-		logger.info("Processing ARP packet coming from " + senderIP + " directed to " + targetIP);
-		if(targetIP.compareTo(Parameters.VRIP) != 0 && targetIP.applyMask(Parameters.NETMASK).compareTo(Parameters.SUBNET) == 0) {
-			logger.info("ARP request not modified because the target node is inside the network");
-			return;
-		}
-				
-		// Generate ARP reply
-		IPacket arpReply = new Ethernet()		// Il nodo si comporta come se fosse il nodo e rispondesse all'host che gli ha fatto richiesta
-			.setSourceMACAddress(Parameters.VRMAC)
-			.setDestinationMACAddress(eth.getSourceMACAddress())
-			.setEtherType(EthType.ARP)
-			.setPriorityCode(eth.getPriorityCode())
-			.setPayload(
-				new ARP()
-				.setHardwareType(ARP.HW_TYPE_ETHERNET)
-				.setProtocolType(ARP.PROTO_TYPE_IP)
-				.setHardwareAddressLength((byte) 6)
-				.setProtocolAddressLength((byte) 4)
-				.setOpCode(ARP.OP_REPLY)
-				.setSenderHardwareAddress(Parameters.VRMAC) 	// Set my MAC address
-				.setSenderProtocolAddress(Parameters.VRIP) 	// Set my IP address
-				.setTargetHardwareAddress(arpRequest.getSenderHardwareAddress())	// Setto il MAC dell'host
-				.setTargetProtocolAddress(arpRequest.getSenderProtocolAddress()));	// Setto l'ip dell'host che ha fatto richiesta
-		
-		// Create the Packet-Out and set basic data for it (buffer id and in port)
-		OFPacketOut.Builder pob = sw.getOFFactory().buildPacketOut();
-		pob.setBufferId(OFBufferId.NO_BUFFER);
-		pob.setInPort(OFPort.ANY);
-		
-		// Create action -> send the packet back from the source port
-		OFActionOutput.Builder actionBuilder = sw.getOFFactory().actions().buildOutput();
-		// The method to retrieve the InPort depends on the protocol version 
-		OFPort inPort = pi.getMatch().get(MatchField.IN_PORT);
-		actionBuilder.setPort(inPort); 
-		
-		// Assign the action
-		pob.setActions(Collections.singletonList((OFAction) actionBuilder.build()));
-		
-		// Set the ARP reply as packet data 
-		byte[] packetData = arpReply.serialize();
-		pob.setData(packetData);
-		
-		logger.info("Sending out ARP reply with IP address " + Parameters.VRIP + " and MAC address " + Parameters.VRMAC + " to " + senderIP);
-		
-		sw.write(pob.build());
-		
 	}
 
 	private void handleIPPacket(IOFSwitch sw, OFPacketIn pi,
