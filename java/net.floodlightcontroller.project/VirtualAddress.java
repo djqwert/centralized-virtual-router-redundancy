@@ -47,8 +47,8 @@ public class VirtualAddress implements IFloodlightModule, IOFMessageListener {
 	protected IFloodlightProviderService floodlightProvider; // Reference to the provider
 	
 	// Rule timeouts
-	private final static short IDLE_TIMEOUT = 5;
-	private final static short HARD_TIMEOUT = 0;
+	private final static short IDLE_TIMEOUT = 0;
+	private final static short HARD_TIMEOUT = 1;
 
 	private static final Logger logger = LoggerFactory.getLogger(VirtualAddress.class);
 
@@ -280,9 +280,65 @@ public class VirtualAddress implements IFloodlightModule, IOFMessageListener {
 
 	private void handleIPErrPacket(IOFSwitch sw, OFPacketIn pi, FloodlightContext cntx) {
 		
-		logger.info("No Master Router selected");
+		// Double check that the payload is IPv4
+		Ethernet eth = IFloodlightProviderService.bcStore.get(cntx,
+				IFloodlightProviderService.CONTEXT_PI_PAYLOAD);
+		if (! (eth.getPayload() instanceof IPv4))
+			return;
 		
-		// Bisogna creare un messaggio di risposta di errore al client
+		// Cast the IP packet
+		IPv4 ipv4 = (IPv4) eth.getPayload();
+
+		// Check that the IP is actually an ICMP request
+		if (! (ipv4.getPayload() instanceof ICMP))
+			return;
+
+		// Cast to ICMP packet
+		ICMP icmpRequest = (ICMP) ipv4.getPayload();
+			
+		// Generate ICMP reply
+		IPacket icmpReply = new Ethernet()
+			.setSourceMACAddress(Parameters.VRMAC)
+			.setDestinationMACAddress(eth.getSourceMACAddress())
+			.setEtherType(EthType.IPv4)
+			.setPriorityCode(eth.getPriorityCode())
+			.setPayload(
+				new IPv4()
+				.setProtocol(IpProtocol.ICMP)
+				.setDestinationAddress(ipv4.getSourceAddress())
+				.setSourceAddress(Parameters.VRIP)
+				.setTtl((byte)64)
+				.setProtocol(IpProtocol.IPv4)
+				// Set the same payload included in the request
+				.setPayload(
+						new ICMP()
+						.setIcmpType(ICMP.DESTINATION_UNREACHABLE)
+						.setIcmpCode(icmpRequest.getIcmpCode())
+                        .setPayload(icmpRequest.getPayload())
+				)
+				);
+		
+		// Create the Packet-Out and set basic data for it (buffer id and in port)
+		OFPacketOut.Builder pob = sw.getOFFactory().buildPacketOut();
+		pob.setBufferId(OFBufferId.NO_BUFFER);
+		pob.setInPort(OFPort.ANY);
+		
+		// Create action -> send the packet back from the source port
+		OFActionOutput.Builder actionBuilder = sw.getOFFactory().actions().buildOutput();
+		// The method to retrieve the InPort depends on the protocol version 
+		OFPort inPort = pi.getMatch().get(MatchField.IN_PORT);
+		actionBuilder.setPort(inPort); 
+		
+		// Assign the action
+		pob.setActions(Collections.singletonList((OFAction) actionBuilder.build()));
+		
+		// Set the ICMP reply as packet data 
+		byte[] packetData = icmpReply.serialize();
+		pob.setData(packetData);
+		
+		sw.write(pob.build());
+		
+		logger.info("No route available because the Master Router is down");
 		
 	}
 	
