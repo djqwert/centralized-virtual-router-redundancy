@@ -45,8 +45,22 @@ public class Parameters {
 	
 	public final static TransportPort PROTO_PORT = TransportPort.of(8888);
 	
+	// Virtual Address Controller
+	public final static int VAC_SEND_IDLE_TIMEOUT = 0;	// expressed in seconds (1 = 1 sec)
+	public final static int VAC_SEND_HARD_TIMEOUT = 0;
+	public final static int VAC_RECV_IDLE_TIMEOUT = 0;
+	public final static int VAC_RECV_HARD_TIMEOUT = 0;
+	
+	// Virtual Router Election Controller: timeout usati per re-installare la default flow rule sullo switch
+	public final static int VREC_IDLE_TIMEOUT = 0;
+	public final static int VREC_HARD_TIMEOUT = 0;
+	
+	// ARP Controller
+	public final static int ARPC_IDLE_TIMEOUT = 0;
+	public final static int ARPC_HARD_TIMEOUT = 0;
+	
 	public static int MRID = -1;
 	public static int BRID = -1;
-	public static int TIMEOUT = 1500; // expressed in seconds (1000 = 1 sec)
+	public final static int TIMEOUT = 1500; // expressed in seconds (1000 = 1 sec)
 	
 }

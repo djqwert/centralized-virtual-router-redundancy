@@ -45,7 +45,6 @@ def myNetwork():
     h3 = net.addHost('h3', cls=Host, ip='10.0.2.5/24', defaultRoute=virtualAddress)
     h4 = net.addHost('h4', cls=Host, ip='10.0.3.3/24', defaultRoute='via 10.0.3.2')
     h5 = net.addHost('h5', cls=Host, ip='10.0.3.4/24', defaultRoute='via 10.0.3.2')
-    h6 = net.addHost('h6', cls=Host, ip='10.0.3.5/24', defaultRoute='via 10.0.3.2')
 
     info( '*** Add links\n')
     net.addLink(h1, s1, 1, 1)
@@ -71,8 +70,6 @@ def myNetwork():
     net.get('s1').start([c0])
 
     info( '*** Post configure switches and hosts\n')
-    #net.get('r1').cmd('python ./router.py &')
-    #net.get('r2').cmd('python ./router.py &')
 
     CLI(net)
     

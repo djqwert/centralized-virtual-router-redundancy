@@ -32,4 +32,4 @@ net.floodlightcontroller.cpanalyzer.CPAnalyzer
 net.floodlightcontroller.hasupport.HAController
 net.floodlightcontroller.project.VREController
 net.floodlightcontroller.project.ARPController
-net.floodlightcontroller.project.VirtualAddress
+net.floodlightcontroller.project.VAController
