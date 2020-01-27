@@ -43,14 +43,14 @@ public class VREController implements IFloodlightModule, IOFMessageListener {
 	
 	protected IFloodlightProviderService floodlightProvider; // Reference to the provider	
 	
-	private static int[] VRID = new int[] {-1,-1};
+	private static int[] PRIORITY = new int[] {-1,-1};
 	
 	// Rule timeouts
 	private final static short IDLE_TIMEOUT = Parameters.VREC_IDLE_TIMEOUT; // after a second if a dont receive a packet
 	private final static short HARD_TIMEOUT = Parameters.VREC_HARD_TIMEOUT; // never
-	
-	protected static Timer timer = null;
-	TimerTask task = null;
+	private final static int TIMEOUT = Parameters.MASTER_DOWN_INTERVAL;
+	private static Timer MASTER_DOWN_TIMER = null;
+	TimerTask router_down = null;
 	
 	private IOFSwitch sw;
 	
@@ -63,50 +63,8 @@ public class VREController implements IFloodlightModule, IOFMessageListener {
 			/* bisogna strutturare le informazioni in array e mantenere l'indice del router master,
 			 * a questo punto se il master cade, il backup router diventa il nuovo master
 			 */
-			logger.info("Advertisement time expired... " + Parameters.ROUTER[Parameters.MRID] + " is down");
-			
-			// Delete all flow rules
-			//OFFlowMod.Builder flow = sw.getOFFactory().buildFlowDeleteStrict();
-			OFFlowMod.Builder flow = sw.getOFFactory().buildFlowDelete();
-			flow.setBufferId(OFBufferId.NO_BUFFER);
-			flow.setOutPort(OFPort.ANY);
-	        flow.setCookie(U64.of(0));
-	        flow.setPriority(FlowModUtils.PRIORITY_MAX);
-	        
-	        sw.write(flow.build());
-	        
-	        flow = sw.getOFFactory().buildFlowAdd();
-
-	        // Add the default flow rule
-	        flow.setIdleTimeout(IDLE_TIMEOUT);
-	        flow.setHardTimeout(HARD_TIMEOUT);
-	        flow.setBufferId(OFBufferId.NO_BUFFER);
-	        flow.setOutPort(OFPort.ANY);
-	        flow.setCookie(U64.of(0));
-	        flow.setPriority(0);
-	        
-	        ArrayList<OFAction> actionList = new ArrayList<OFAction>();
-	        
-	        OFActions actions = sw.getOFFactory().actions();
-	        
-	        OFActionOutput output = actions.buildOutput()
-        	    .setMaxLen(0xFFffFFff)
-        	    .setPort(OFPort.CONTROLLER)
-        	    .build();
-            actionList.add(output);
-	        
-            flow.setActions(actionList);
-	        sw.write(flow.build());
-	        
-	        // Give the possibility to the Backup Router to become the Master Router, if it is up
-	        VRID[Parameters.MRID] = -1;
-	        Parameters.MRID = Parameters.BRID;
-			Parameters.BRID = -1;
-			
-			if(Parameters.MRID != -1)
-				election();
-			else
-				logger.info("No Router actived...");
+			logger.info("Advertisement interval has expired... " + Parameters.ROUTER[Parameters.MRID] + " is down");
+			handleDisconnection();
 	    	
 	    }
 		
@@ -169,18 +127,22 @@ public class VREController implements IFloodlightModule, IOFMessageListener {
                 IFloodlightProviderService.CONTEXT_PI_PAYLOAD);
 			
 		IPacket pkt = eth.getPayload();
+		
+		if(this.sw == null)
+			this.sw = sw;
 
         // Dissect Packet included in Packet-In
-		if (eth.isBroadcast()) {
+		if(eth.isBroadcast()) {
 			
-			if (pkt instanceof IPv4) {
+			if(pkt instanceof IPv4) {
 				
 				IPv4 ip = (IPv4) pkt;
 				
 				IPv4Address src = ip.getSourceAddress();
 				//IPv4Address dest = ip.getDestinationAddress();
 				//logger.info("Pre-processing IPv4 packet coming from " + src + " directed to " + dest);
-
+				
+				
 				if(ip.getProtocol() == IpProtocol.UDP) {
 					
 					UDP udp = (UDP) ip.getPayload();
@@ -189,11 +151,12 @@ public class VREController implements IFloodlightModule, IOFMessageListener {
 							
 							if(Parameters.MRID == -1 || (Parameters.MRID != -1 && ip.getSourceAddress().compareTo(Parameters.ROUTER_IP[Parameters.MRID]) != 0)) {
 							
-								handleVRID(sw, src, udp);
+								setPriority(sw, src, udp);
 								
 							} else {
 								
-								handleADV(msg);
+								// handle ADV
+								getPriority(sw, src, udp);		
 								
 							}
 						
@@ -209,61 +172,58 @@ public class VREController implements IFloodlightModule, IOFMessageListener {
 		
 	}
 	
-	private void handleADV(OFMessage msg) {
+	private void getPriority(IOFSwitch sw, IPv4Address src, UDP udp) {
 		
-		logger.info("Virtual Router Advertisement received");
-		
-		timer.cancel();
-		timer.purge();
-		timer = new Timer();
-		task = new newElection();
-		timer.schedule(task, Parameters.TIMEOUT);
-		
-	}
-	
-	private void handleVRID(IOFSwitch sw, IPv4Address src, UDP udp) {
-	
 		Data data = (Data) udp.getPayload();
 		
 		int id = Integer.parseInt(new String(data.getData()));
 		
-		if(timer == null) {
-			this.sw = sw;
-		}
+		if(id == 0) {
 			
-		if(src.compareTo(Parameters.ROUTER_IP[0]) == 0)
-			VRID[0] = id;
-		else
-			VRID[1] = id;
-	
-		logger.info("VRID " + id + " sent from " + src + " has arrived");
-		
-		election();
+			logger.info(Parameters.ROUTER[Parameters.MRID] + " has been disconnected");
+			handleDisconnection();			
+			
+		}else{
+			
+			logger.info("Virtual Router Advertisement received");
+			setTimer(null);
+			
+		}
 		
 	}
 	
-	private void election() {
+	private void setPriority(IOFSwitch sw, IPv4Address src, UDP udp) {
+	
+		Data data = (Data) udp.getPayload();
+		
+		int id = Integer.parseInt(new String(data.getData()));
+			
+		if(src.compareTo(Parameters.ROUTER_IP[0]) == 0)
+			PRIORITY[0] = id;
+		else
+			PRIORITY[1] = id;
+	
+		logger.info("Priority " + id + " sent from " + src + " has arrived");
+		
+		election(sw);
+		
+	}
+	
+	private void election(IOFSwitch sw) {
 		
 		logger.info("Election phase is starting...");
 		
-		Parameters.MRID = VRID[0] > VRID[1] ? 0 : 1;
+		Parameters.MRID = PRIORITY[0] > PRIORITY[1] ? 0 : 1;
 		
-		if(VRID[0] != -1 && VRID[1] != -1)
-			Parameters.BRID = VRID[0] <= VRID[1] ? 0 : 1;
+		if(PRIORITY[0] != -1 && PRIORITY[1] != -1)
+			Parameters.BRID = PRIORITY[0] <= PRIORITY[1] ? 0 : 1;
 		
 		logger.info("Election has been concluded, setting " + Parameters.ROUTER[Parameters.MRID] + " as MASTER!");
 		
 		if(Parameters.BRID != -1)
-			logger.info("Election has been concluded, setting Router " + Parameters.ROUTER[Parameters.BRID]+ " as BACKUP!");
+			logger.info("Election has been concluded, setting " + Parameters.ROUTER[Parameters.BRID]+ " as BACKUP!");
 		
-		if(timer != null) {
-			timer.cancel();
-			timer.purge();
-		}
-		timer = new Timer();
-		task = new newElection();
-		timer.schedule(task, Parameters.TIMEOUT);
-		
+		setTimer(sw);
 		handleElection();
 		
 	}
@@ -271,7 +231,7 @@ public class VREController implements IFloodlightModule, IOFMessageListener {
 	private void handleElection() {
 		
 		Data data = new Data();
-		data.setData(String.valueOf(VRID[Parameters.MRID]).getBytes());
+		data.setData(String.valueOf(PRIORITY[Parameters.MRID]).getBytes());
 		
 		// Creo il pacchetto di risposta per entrambi i router
 		IPacket adv = new Ethernet()
@@ -322,7 +282,74 @@ public class VREController implements IFloodlightModule, IOFMessageListener {
 		
 		sw.write(pob.build());
 		
-		logger.info("Routers has been advised");
+		logger.info("Routers has been informed");
+		
+	}
+	
+	private void stopTimer() {
+		
+		if(MASTER_DOWN_TIMER != null) {
+			MASTER_DOWN_TIMER.cancel();
+			MASTER_DOWN_TIMER.purge();
+		}
+		
+	}
+	
+	private void setTimer(IOFSwitch sw) {
+		
+		stopTimer();
+		router_down = new newElection();
+		MASTER_DOWN_TIMER = new Timer();
+		MASTER_DOWN_TIMER.schedule(router_down, TIMEOUT);
+		
+	}
+	
+	private void handleDisconnection(){
+		
+		// Delete all flow rules
+		//OFFlowMod.Builder flow = sw.getOFFactory().buildFlowDeleteStrict();
+		OFFlowMod.Builder flow = sw.getOFFactory().buildFlowDelete();
+		flow.setBufferId(OFBufferId.NO_BUFFER);
+		flow.setOutPort(OFPort.ANY);
+        flow.setCookie(U64.of(0));
+        flow.setPriority(FlowModUtils.PRIORITY_MAX);
+        
+        sw.write(flow.build());
+
+        // Add the default flow rule
+        flow = sw.getOFFactory().buildFlowAdd();
+        
+        flow.setIdleTimeout(IDLE_TIMEOUT);
+        flow.setHardTimeout(HARD_TIMEOUT);
+        flow.setBufferId(OFBufferId.NO_BUFFER);
+        flow.setOutPort(OFPort.ANY);
+        flow.setCookie(U64.of(0));
+        flow.setPriority(0);
+        
+        ArrayList<OFAction> actionList = new ArrayList<OFAction>();
+        
+        OFActions actions = sw.getOFFactory().actions();
+        
+        OFActionOutput output = actions.buildOutput()
+    	    .setMaxLen(0xFFffFFff)
+    	    .setPort(OFPort.CONTROLLER)
+    	    .build();
+        actionList.add(output);
+        
+        flow.setActions(actionList);
+        sw.write(flow.build());
+        
+        // Give the possibility to the Backup Router to become the Master Router, if it is up
+        PRIORITY[Parameters.MRID] = -1;
+        Parameters.MRID = Parameters.BRID;
+		Parameters.BRID = -1;
+		
+		if(Parameters.MRID != -1)
+			election(null);
+		else {
+			stopTimer();
+			logger.info("No Router has found actived...");
+		}
 		
 	}
 

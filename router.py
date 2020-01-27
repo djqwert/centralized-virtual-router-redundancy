@@ -7,29 +7,40 @@ import socket
 import select
 import netifaces as ni
 import sys
+import signal
+
+# function useful to handle disconnection
+def signal_handler(sig, frame):
+        print "\nRouter stopped!"
+        sock.sendto(str(0), (BROADCAST_ADDRESS, COMM_PORT))
+        print "Floodlight has been informed"
+        exit(0)
+
+signal.signal(signal.SIGINT, signal_handler)
 
 # Set of parameters useful for this application.
 # The application need 2 informations given in input with the command: python ./router [DATA1] [DATA2]
-# DATA1 is the name of the interface used to communicate with the controller and to send in broadcast the vrid
-# DATA2 is used to send a vrid via command line to the router
+# DATA1 is the name of the interface used to communicate with the controller and to send in broadcast the PRIORITY
+# DATA2 is used to send a PRIORITY via command line to the router
 INTERFACE_NAME = sys.argv[1] + "-eth1"
 INTERFACE_IP = ni.ifaddresses(INTERFACE_NAME)[ni.AF_INET][0]["addr"]
 BROADCAST_ADDRESS = "10.0.2.255"
-VRIP = "10.0.2.254"         # vrip used by the router
-COMM_PORT = 8888            # communication port used to exchange packet between routers and controller
-ROUTER_STATE = 0            # 0: no-state, 1: backup, 2: master
-WAITING_TIME = 0.5          # in real cases WAITING_TIME must be about 1 ms (0.001)
-VRID = int(sys.argv[2])     # router id must be beetwen 1-255
-sock = None                 # socket
+VRIP = "10.0.2.254"             # vrip used by the router
+COMM_PORT = 8888                # communication port used to exchange packet between routers and controller
+ROUTER_STATE = 0                # 0: no-state, 1: backup, 2: master
+ADVERTISEMENT_INTERVAL = 1      # default ADVERTISEMENT_INTERVAL must be about 1 sec
+VRID = 1
+PRIORITY = int(sys.argv[2])     # priority must be beetwen 1-254
+sock = None                     # socket
 
 # This function prints the basic informations of the router like interface used to communicate
-# With the controller, its address ip and its vrid
+# With the controller, its address ip and its PRIORITY
 def info():
 
     print "[INFO]"
     print INTERFACE_NAME
     print "\tinet " + INTERFACE_IP + " netmask 255.255.255.0 " + "broadcast " + BROADCAST_ADDRESS
-    print "VRID: " + str(VRID)
+    print "PRIORITY: " + str(PRIORITY)
     
     global sock
 
@@ -43,10 +54,10 @@ def info():
 
     print "[INFO] Socket bound to port %d" %(COMM_PORT)
 
-    sock.sendto(str(VRID), (BROADCAST_ADDRESS, COMM_PORT))
+    sock.sendto(str(PRIORITY), (BROADCAST_ADDRESS, COMM_PORT))
     print "[INFO] Packet sent to %s throught port %s" %(BROADCAST_ADDRESS, COMM_PORT)
     
-# The router sent its vrid in broadcast and it waits for the response from the floodlight controller,
+# The router sent its PRIORITY in broadcast and it waits for the response from the floodlight controller,
 # if the router dont receive a packet within 10 seconds, the election will stop
 def election():
 
@@ -61,13 +72,13 @@ def election():
     except:
         print "[ERR] Controller is offline"
         sock.close()
-        exit()
+        exit(0)
 
     print "[INFO] Election terminated"
 
     data = int(data);
 
-    if VRID < data:
+    if PRIORITY < data:
         ROUTER_STATE = 1
     else:
         ROUTER_STATE = 2
@@ -102,7 +113,7 @@ def protocol():
             
             while True:
                 data, addr = sock.recvfrom(1024) 
-                if addr[0] == VRIP and VRID == int(data):
+                if addr[0] == VRIP and PRIORITY == int(data):
                     ROUTER_STATE = 2
                     break;
             
@@ -113,23 +124,23 @@ def protocol():
             
             while True:
             
-                sock.sendto(str(VRID), (BROADCAST_ADDRESS, COMM_PORT));
+                sock.sendto(str(PRIORITY), (BROADCAST_ADDRESS, COMM_PORT));
                 print "[INFO] VRRP advertisement sent to (%s, %d)" %(BROADCAST_ADDRESS, COMM_PORT)
                 
                 data, addr = sock.recvfrom(1024)
                 
-                if addr[0] == VRIP and VRID < int(data):
+                if addr[0] == VRIP and PRIORITY < int(data):
                     # print "Ho ricevuto un pacchetto con ", int(data) , " da: ", addr
                     ROUTER_STATE = 1
                     break;
                 
-                time.sleep(WAITING_TIME)  
+                time.sleep(ADVERTISEMENT_INTERVAL)  
             
         else:                                       # OMG, What did it happen here?
                                                     # in general, should must be impossible arrive here
             print "[ERR] Something went wrong during the selection role"
             sock.close()
-            exit();
+            exit(-1);
 
     sock.close()
 

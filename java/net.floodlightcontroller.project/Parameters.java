@@ -54,13 +54,13 @@ public class Parameters {
 	// Virtual Router Election Controller: timeout usati per re-installare la default flow rule sullo switch
 	public final static int VREC_IDLE_TIMEOUT = 0;
 	public final static int VREC_HARD_TIMEOUT = 0;
+	public final static int MASTER_ADVERTISEMENT_INTERVAL = 1000; // expressed in seconds (1000 = 1 sec)
+	public final static int MASTER_DOWN_INTERVAL  = 3 * MASTER_ADVERTISEMENT_INTERVAL; 
+	public static int MRID = -1;
+	public static int BRID = -1;
 	
 	// ARP Controller
 	public final static int ARPC_IDLE_TIMEOUT = 0;
-	public final static int ARPC_HARD_TIMEOUT = 0;
-	
-	public static int MRID = -1;
-	public static int BRID = -1;
-	public final static int TIMEOUT = 1500; // expressed in seconds (1000 = 1 sec)
+	public final static int ARPC_HARD_TIMEOUT = 0;	
 	
 }
