@@ -264,6 +264,7 @@ public class VAController implements IFloodlightModule, IOFMessageListener {
         Match.Builder match = sw.getOFFactory().buildMatch();
         match.setExact(MatchField.ETH_TYPE, EthType.IPv4)
     	.setExact(MatchField.IPV4_DST, src)
+    	.setExact(MatchField.IPV4_SRC, dest)
         .setExact(MatchField.IP_PROTO, IpProtocol.ICMP);
         
         ArrayList<OFAction> actionList = new ArrayList<OFAction>();

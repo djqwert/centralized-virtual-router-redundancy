@@ -1,7 +1,6 @@
 # This protocol to work correctly need a Floodlight controller
 # installed and already actived inside the network
 
-from random import random
 import time
 import socket  
 import select
@@ -22,7 +21,7 @@ signal.signal(signal.SIGINT, signal_handler)
 # The application need 2 informations given in input with the command: python ./router [DATA1] [DATA2]
 # DATA1 is the name of the interface used to communicate with the controller and to send in broadcast the PRIORITY
 # DATA2 is used to send a PRIORITY via command line to the router
-INTERFACE_NAME = sys.argv[1] + "-eth1"
+INTERFACE_NAME = sys.argv[1]
 INTERFACE_IP = ni.ifaddresses(INTERFACE_NAME)[ni.AF_INET][0]["addr"]
 BROADCAST_ADDRESS = "10.0.2.255"
 VRIP = "10.0.2.254"             # vrip used by the router
@@ -109,28 +108,51 @@ def protocol():
         if ROUTER_STATE == 1:                       # I am waiting for my colleague router goes down
             
             print "[INFO] I am the virtual backup router"
-            sock.setblocking(1)
             
             while True:
-                data, addr = sock.recvfrom(1024) 
+                
+                try:
+                    sock.settimeout(2*ADVERTISEMENT_INTERVAL)
+                    while True:
+                        data, addr = sock.recvfrom(1024)    # verifico che il controller sia attivo
+                        if addr[0] == VRIP:
+                            break;
+                except:
+                    print "[ERR] Controller is offline"
+                    sock.close()
+                    exit(0)
+                
+                if addr[0] == VRIP and PRIORITY < int(data):
+                    print "[INFO] I received the advertisement"
+                    continue;
                 if addr[0] == VRIP and PRIORITY == int(data):
                     ROUTER_STATE = 2
                     break;
+                 
             
         elif ROUTER_STATE == 2:                       # I am the master! Yeah!
             
             print "[INFO] I am the virtual master router"
-            sock.setblocking(0)
             
             while True:
             
                 sock.sendto(str(PRIORITY), (BROADCAST_ADDRESS, COMM_PORT));
                 print "[INFO] VRRP advertisement sent to (%s, %d)" %(BROADCAST_ADDRESS, COMM_PORT)
                 
-                data, addr = sock.recvfrom(1024)
+                try:
+                    sock.settimeout(2*ADVERTISEMENT_INTERVAL)
+                    while True:
+                        data, addr = sock.recvfrom(1024)    # verifico che il controller sia attivo
+                        if addr[0] == VRIP:
+                            break;
+                except:
+                    print "[ERR] Controller is offline"
+                    sock.close()
+                    exit(0)
                 
+                if addr[0] == VRIP and PRIORITY == int(data):
+                    print "[INFO] I received the advertisement"
                 if addr[0] == VRIP and PRIORITY < int(data):
-                    # print "Ho ricevuto un pacchetto con ", int(data) , " da: ", addr
                     ROUTER_STATE = 1
                     break;
                 

@@ -186,7 +186,8 @@ public class VREController implements IFloodlightModule, IOFMessageListener {
 		}else{
 			
 			logger.info("Virtual Router Advertisement received");
-			setTimer(null);
+			handleElection();
+			setTimer();
 			
 		}
 		
@@ -205,11 +206,11 @@ public class VREController implements IFloodlightModule, IOFMessageListener {
 	
 		logger.info("Priority " + id + " sent from " + src + " has arrived");
 		
-		election(sw);
+		election();
 		
 	}
 	
-	private void election(IOFSwitch sw) {
+	private void election() {
 		
 		logger.info("Election phase is starting...");
 		
@@ -223,7 +224,7 @@ public class VREController implements IFloodlightModule, IOFMessageListener {
 		if(Parameters.BRID != -1)
 			logger.info("Election has been concluded, setting " + Parameters.ROUTER[Parameters.BRID]+ " as BACKUP!");
 		
-		setTimer(sw);
+		setTimer();
 		handleElection();
 		
 	}
@@ -295,7 +296,7 @@ public class VREController implements IFloodlightModule, IOFMessageListener {
 		
 	}
 	
-	private void setTimer(IOFSwitch sw) {
+	private void setTimer() {
 		
 		stopTimer();
 		router_down = new newElection();
@@ -345,7 +346,7 @@ public class VREController implements IFloodlightModule, IOFMessageListener {
 		Parameters.BRID = -1;
 		
 		if(Parameters.MRID != -1)
-			election(null);
+			election();
 		else {
 			stopTimer();
 			logger.info("No Router has found actived...");

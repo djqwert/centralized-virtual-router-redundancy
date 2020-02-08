@@ -12,11 +12,9 @@ import org.projectfloodlight.openflow.protocol.OFPacketOut;
 import org.projectfloodlight.openflow.protocol.OFType;
 import org.projectfloodlight.openflow.protocol.action.OFAction;
 import org.projectfloodlight.openflow.protocol.action.OFActionOutput;
-import org.projectfloodlight.openflow.protocol.action.OFActionSetField;
 import org.projectfloodlight.openflow.protocol.action.OFActions;
 import org.projectfloodlight.openflow.protocol.match.Match;
 import org.projectfloodlight.openflow.protocol.match.MatchField;
-import org.projectfloodlight.openflow.protocol.oxm.OFOxms;
 import org.projectfloodlight.openflow.types.EthType;
 import org.projectfloodlight.openflow.types.MacAddress;
 import org.projectfloodlight.openflow.types.OFBufferId;
@@ -109,7 +107,7 @@ public class ARPController implements IOFMessageListener, IFloodlightModule {
 		OFPacketIn pi = (OFPacketIn) msg;
 
         // Dissect Packet included in Packet-In
-		if ((eth.isBroadcast() || eth.isMulticast()) && pkt instanceof ARP) {
+		if ((eth.isBroadcast() || eth.isMulticast() || eth.getDestinationMACAddress().compareTo(Parameters.VRMAC) == 0) && pkt instanceof ARP) {
 			
 			ARP arp = (ARP) eth.getPayload();
 			
@@ -203,9 +201,7 @@ public class ARPController implements IOFMessageListener, IFloodlightModule {
 		ArrayList<OFAction> actionList = new ArrayList<OFAction>();
 		
 		OFActions actions = sw.getOFFactory().actions();
-		
-		OFOxms oxms = sw.getOFFactory().oxms();
-		
+				
         flow.setIdleTimeout(IDLE_TIMEOUT);
         flow.setHardTimeout(HARD_TIMEOUT);
         flow.setBufferId(OFBufferId.NO_BUFFER);
@@ -216,15 +212,6 @@ public class ARPController implements IOFMessageListener, IFloodlightModule {
         Match.Builder match = sw.getOFFactory().buildMatch();
         match.setExact(MatchField.ETH_TYPE, EthType.ARP)
         	.setExact(MatchField.ETH_DST, MacAddress.of("ff:ff:ff:ff:ff:ff"));
-        
-        OFActionSetField setDlDst = actions.buildSetField()
-        	    .setField(
-        	        oxms.buildEthDst()
-        	        .setValue(Parameters.ROUTER_MAC[Parameters.MRID])
-        	        .build()
-        	    )
-        	    .build();
-        actionList.add(setDlDst);
 
         OFActionOutput output = actions.buildOutput()
         	    .setMaxLen(0xFFffFFff)
@@ -235,20 +222,18 @@ public class ARPController implements IOFMessageListener, IFloodlightModule {
         flow.setActions(actionList);
         flow.setMatch(match.build());
         
-        if(sw.write(flow.build()))
-        	logger.info("Broadcast Flow Rule written on the Floodlight Switch");
-        else
-        	logger.info("Broadcast Flow Rule didn't write on the Floodlight Switch");
+        sw.write(flow.build());
+        
+        logger.info("Broadcast Flow Rule written on the Floodlight Switch");
         
         OFPacketOut.Builder pob = sw.getOFFactory().buildPacketOut();
 		pob.setBufferId(pi.getBufferId());
 		pob.setInPort(OFPort.ANY);
 		pob.setActions(actionList);
  				
- 		if(sw.write(pob.build()))
- 			logger.info("Packet retrasmitted correctly");
- 		else
- 			logger.info("Packet didn't retrasmit correctly");
+ 		sw.write(pob.build());
+ 		
+ 		logger.info("Packet retrasmitted correctly");
  		
 	}
 	
@@ -282,10 +267,9 @@ public class ARPController implements IOFMessageListener, IFloodlightModule {
         flow.setActions(actionList);
         flow.setMatch(match.build());
         
-        if(sw.write(flow.build()))
-        	logger.info("Virtual Flow Rule written on the Floodlight Switch");
-        else
-        	logger.info("Virtual Flow Rule didn't write on the Floodlight Switch");
+        sw.write(flow.build());
+        	
+        logger.info("Virtual Flow Rule written on the Floodlight Switch");
 		
 	}
 
