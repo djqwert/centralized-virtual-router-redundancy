@@ -1,4 +1,4 @@
-# Centralized Virtual Router Redundancy Protocol using a Floodlight Controller
+# Centralized Virtual Router Redundancy Protocol (CVRRP) using a Floodlight Controller
 
 Given a scenario with two subnets. Where, the first one is Network A that is composed of a set of clients and a SDN-enabled switch (SS), which is managed by an SDN controller. Network B is composed of a set of servers and a legacy switch (LS). The two networks are connected by means of two routers.
 
