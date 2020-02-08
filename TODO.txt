@@ -1,9 +1,0 @@
-- provare a spegnere un router e vedere se worka l'altro
-- usare osvbridge
-- ?usare netcat?
-- i router inviano l'adv in broadcast. siccome il pacchetto viene inviato
-	in tutte le linee dello switch ci sono due possibilità:
-	o si evitare il broadcast o si specifica una qualche regola sullo switch
-
-Da rivedere:
-- VirtualRouterElectionController (VREC) e Virtual address modules
