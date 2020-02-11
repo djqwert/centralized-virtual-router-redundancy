@@ -28,6 +28,7 @@ VRIP = "10.0.2.254"             # vrip used by the router
 COMM_PORT = 8888                # communication port used to exchange packet between routers and controller
 ROUTER_STATE = 0                # 0: no-state, 1: backup, 2: master
 ADVERTISEMENT_INTERVAL = 1      # default ADVERTISEMENT_INTERVAL must be about 1 sec
+CTR_DOWN_INTERVAL = 3*ADVERTISEMENT_INTERVAL  # time interval to declare the controller down
 VRID = 1
 PRIORITY = int(sys.argv[2])     # priority must be beetwen 1-254
 sock = None                     # socket
@@ -112,7 +113,7 @@ def protocol():
             while True:
                 
                 try:
-                    sock.settimeout(2*ADVERTISEMENT_INTERVAL)
+                    sock.settimeout(CTR_DOWN_INTERVAL)
                     while True:
                         data, addr = sock.recvfrom(1024)    # verifico che il controller sia attivo
                         if addr[0] == VRIP:
@@ -140,7 +141,7 @@ def protocol():
                 print "[INFO] VRRP advertisement sent to (%s, %d)" %(BROADCAST_ADDRESS, COMM_PORT)
                 
                 try:
-                    sock.settimeout(2*ADVERTISEMENT_INTERVAL)
+                    sock.settimeout(CTR_DOWN_INTERVAL)
                     while True:
                         data, addr = sock.recvfrom(1024)    # verifico che il controller sia attivo
                         if addr[0] == VRIP:
