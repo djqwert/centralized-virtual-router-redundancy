@@ -146,7 +146,7 @@ public class VREController implements IFloodlightModule, IOFMessageListener {
 
 					if(udp.getDestinationPort().compareTo(Parameters.PROTO_PORT) == 0) {
 							
-							if(Parameters.MRID == -1 || (Parameters.MRID != -1 && ip.getSourceAddress().compareTo(Parameters.ROUTER_IP[Parameters.MRID]) != 0)) {
+							if(Parameters.MRID == -1 || (Parameters.MRID != -1 && Parameters.BRID == -1 && ip.getSourceAddress().compareTo(Parameters.ROUTER_IP[Parameters.MRID]) != 0)) {
 							
 								setPriority(sw, src, udp);
 								
@@ -174,12 +174,19 @@ public class VREController implements IFloodlightModule, IOFMessageListener {
 		
 		Data data = (Data) udp.getPayload();
 		
-		int id = Integer.parseInt(new String(data.getData()));
+		int priority = Integer.parseInt(new String(data.getData()));
 		
-		if(id == 0) {	// A router can send a disconnection command with a priority value equal to zero
+		if(priority == 0) {	// A router can send a disconnection command with a priority value equal to zero
 			
-			logger.info(Parameters.ROUTER[Parameters.MRID] + " has been disconnected");
-			handleDisconnection();			
+			int id = src.compareTo(Parameters.ROUTER_IP[0]) == 0 ? 0 : 1;	// Recover router ID
+			PRIORITY[id] = -1;												// Set its priority to -1
+			
+			logger.info(Parameters.ROUTER[id] + " has been disconnected");
+			
+			if(id == Parameters.MRID)										// If the master has been disconnected, it will be a new election
+				handleDisconnection();
+			else
+				Parameters.BRID = -1;										// .. otherwise BRID will be set to -1
 			
 		}else{			// The controller answer generating an ADV RPY for routers
 			
@@ -224,8 +231,10 @@ public class VREController implements IFloodlightModule, IOFMessageListener {
 		if(Parameters.BRID != -1)
 			logger.info("Election has been concluded, setting " + Parameters.ROUTER[Parameters.BRID]+ " as BACKUP!");
 		
-		setTimer();
+		resetFlowRules();
 		handleElection();
+		setTimer();
+		
 		
 	}
 
@@ -309,6 +318,25 @@ public class VREController implements IFloodlightModule, IOFMessageListener {
 	// Used to delete all flows rules associated to old master router and to install the default flow rule
 	private void handleDisconnection(){
 		
+        // Give the possibility to the Backup Router to become the Master Router, if it is up
+        PRIORITY[Parameters.MRID] = -1;
+        Parameters.MRID = Parameters.BRID;
+		Parameters.BRID = -1;
+		
+		if(Parameters.MRID != -1)
+			election();
+		else {
+			stopTimer();
+			resetFlowRules();
+			logger.info("No Router has found actived...");
+		}
+		
+	}
+	
+	private void resetFlowRules(){
+		
+		logger.info("Resetting flow rules...");
+		
 		// Delete all flow rules
 		//OFFlowMod.Builder flow = sw.getOFFactory().buildFlowDeleteStrict();
 		OFFlowMod.Builder flow = sw.getOFFactory().buildFlowDelete();
@@ -341,19 +369,8 @@ public class VREController implements IFloodlightModule, IOFMessageListener {
         
         flow.setActions(actionList);
         sw.write(flow.build());
-        
-        // Give the possibility to the Backup Router to become the Master Router, if it is up
-        PRIORITY[Parameters.MRID] = -1;
-        Parameters.MRID = Parameters.BRID;
-		Parameters.BRID = -1;
-		
-		if(Parameters.MRID != -1)
-			election();
-		else {
-			stopTimer();
-			logger.info("No Router has found actived...");
-		}
 		
 	}
+
 
 }

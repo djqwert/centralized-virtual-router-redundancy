@@ -56,7 +56,6 @@ def myNetwork():
     net.addLink(s2, r2, 5, 2, params2={ 'ip' : '10.0.3.2/24' })
     net.addLink(h4, s2, 1, 1)
     net.addLink(h5, s2, 1, 2)
-    net.addLink(h6, s2, 1, 3)
 
     info( '*** Starting network\n')
     net.build()
