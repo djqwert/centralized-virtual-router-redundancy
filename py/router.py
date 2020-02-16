@@ -19,7 +19,7 @@ signal.signal(signal.SIGINT, signal_handler)
 
 # Set of parameters useful for this application.
 # The application need 2 informations given in input with the command: python ./router [DATA1] [DATA2]
-# DATA1 is the name of the interface used to communicate with the controller and to send in broadcast the PRIORITY
+# DATA1 Is the name of the interface used to communicate with the controller and to send in broadcast the PRIORITY
 # DATA2 is used to send a PRIORITY via command line to the router
 INTERFACE_NAME = sys.argv[1]
 INTERFACE_IP = ni.ifaddresses(INTERFACE_NAME)[ni.AF_INET][0]["addr"]
@@ -66,7 +66,7 @@ def election():
     try:
         sock.settimeout(10)
         while True:
-            data, addr = sock.recvfrom(1024)    # verifico che gli altri nodi siano attivi
+            data, addr = sock.recvfrom(1024)                # Is the controller on?
             if addr[0] == VRIP:
                 break;
     except:
@@ -106,7 +106,7 @@ def protocol():
 
     while True:
         
-        if ROUTER_STATE == 1:                       # I am waiting for my colleague router goes down
+        if ROUTER_STATE == 1:                               # I am waiting for my colleague router goes down
             
             print "[INFO] I am the virtual backup router"
             
@@ -115,7 +115,7 @@ def protocol():
                 try:
                     sock.settimeout(CTR_DOWN_INTERVAL)
                     while True:
-                        data, addr = sock.recvfrom(1024)    # verifico che il controller sia attivo
+                        data, addr = sock.recvfrom(1024)    # Is the controller on?
                         if addr[0] == VRIP:
                             break;
                 except:
@@ -131,7 +131,7 @@ def protocol():
                     break;
                  
             
-        elif ROUTER_STATE == 2:                       # I am the master! Yeah!
+        elif ROUTER_STATE == 2:                              # I am the master! Yeah!
             
             print "[INFO] I am the virtual master router"
             
@@ -143,7 +143,7 @@ def protocol():
                 try:
                     sock.settimeout(CTR_DOWN_INTERVAL)
                     while True:
-                        data, addr = sock.recvfrom(1024)    # verifico che il controller sia attivo
+                        data, addr = sock.recvfrom(1024)    # Is the controller on?
                         if addr[0] == VRIP:
                             break;
                 except:
@@ -159,8 +159,8 @@ def protocol():
                 
                 time.sleep(ADVERTISEMENT_INTERVAL)  
             
-        else:                                       # OMG, What did it happen here?
-                                                    # in general, should must be impossible arrive here
+        else:                                               # OMG, What did it happen here?
+                                                            # in general, should must be impossible arrive here
             print "[ERR] Something went wrong during the selection role"
             sock.close()
             exit(-1);

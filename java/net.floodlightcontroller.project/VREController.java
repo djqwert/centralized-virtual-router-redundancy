@@ -60,9 +60,6 @@ public class VREController implements IFloodlightModule, IOFMessageListener {
 	    
 		public void run() {
 	        
-			/* bisogna strutturare le informazioni in array e mantenere l'indice del router master,
-			 * a questo punto se il master cade, il backup router diventa il nuovo master
-			 */
 			logger.info("Advertisement interval has expired... " + Parameters.ROUTER[Parameters.MRID] + " is down");
 			handleDisconnection();
 	    	
@@ -172,18 +169,19 @@ public class VREController implements IFloodlightModule, IOFMessageListener {
 		
 	}
 	
+	// Used to send the master's priority as ADV RPY to routers
 	private void getPriority(IOFSwitch sw, IPv4Address src, UDP udp) {
 		
 		Data data = (Data) udp.getPayload();
 		
 		int id = Integer.parseInt(new String(data.getData()));
 		
-		if(id == 0) {
+		if(id == 0) {	// A router can send a disconnection command with a priority value equal to zero
 			
 			logger.info(Parameters.ROUTER[Parameters.MRID] + " has been disconnected");
 			handleDisconnection();			
 			
-		}else{
+		}else{			// The controller answer generating an ADV RPY for routers
 			
 			logger.info("Virtual Router Advertisement received");
 			handleElection();
@@ -193,6 +191,7 @@ public class VREController implements IFloodlightModule, IOFMessageListener {
 		
 	}
 	
+	// Used to set PRIORITY[i] with the priority sent by the router i
 	private void setPriority(IOFSwitch sw, IPv4Address src, UDP udp) {
 	
 		Data data = (Data) udp.getPayload();
@@ -210,6 +209,7 @@ public class VREController implements IFloodlightModule, IOFMessageListener {
 		
 	}
 	
+	// Start election phase
 	private void election() {
 		
 		logger.info("Election phase is starting...");
@@ -229,6 +229,7 @@ public class VREController implements IFloodlightModule, IOFMessageListener {
 		
 	}
 
+	// Inform routers with the election result genereting the ELE (ADV RPY) message
 	private void handleElection() {
 		
 		Data data = new Data();
@@ -305,6 +306,7 @@ public class VREController implements IFloodlightModule, IOFMessageListener {
 		
 	}
 	
+	// Used to delete all flows rules associated to old master router and to install the default flow rule
 	private void handleDisconnection(){
 		
 		// Delete all flow rules

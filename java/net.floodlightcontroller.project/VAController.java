@@ -161,17 +161,18 @@ public class VAController implements IFloodlightModule, IOFMessageListener {
 		
 		if(Parameters.MRID != -1) {
 		
-			sendICMP(sw, pi, cntx, src, dest);
-			receiveICMP(sw, pi, cntx, src, dest);
+			sendICMP(sw, pi, cntx, src, dest);			// Install flow rule from net A to net B
+			receiveICMP(sw, pi, cntx, src, dest);		// Install flow rule from net B to net A
 			
 		} else {
 			
-			errorICMP(sw, pi, cntx, src, dest);
+			errorICMP(sw, pi, cntx, src, dest);			
 			
 		}
              
 	}
 	
+	// Install flow rule from net A to net B
 	private void sendICMP(IOFSwitch sw, OFPacketIn pi,
 			FloodlightContext cntx, IPv4Address src, IPv4Address dest) {
 		
@@ -194,7 +195,7 @@ public class VAController implements IFloodlightModule, IOFMessageListener {
         	.setExact(MatchField.IP_PROTO, IpProtocol.ICMP);
         	//.setExact(MatchField.ICMPV4_TYPE, ICMPv4Type.of(ICMP.ECHO_REQUEST));
         
-        // Create the actions (Change DST mac and IP addresses and set the out-port)        
+        // Create the actions (Change DST mac and set the out-port)        
         ArrayList<OFAction> actionList = new ArrayList<OFAction>();
         
         OFActions actions = sw.getOFFactory().actions();
@@ -249,6 +250,7 @@ public class VAController implements IFloodlightModule, IOFMessageListener {
 		
 	}
 	
+	// Install flow rule from net B to net A
 	private void receiveICMP(IOFSwitch sw, OFPacketIn pi,
 			FloodlightContext cntx, IPv4Address src, IPv4Address dest) {
         
@@ -273,6 +275,7 @@ public class VAController implements IFloodlightModule, IOFMessageListener {
         
         OFOxms oxms = sw.getOFFactory().oxms();
         
+		// Create the actions (Change SRC mac with VR MAC and set the out-port)      
         OFActionSetField setDlDstRev = actions.buildSetField()
     	    .setField(
     	        oxms.buildEthSrc()

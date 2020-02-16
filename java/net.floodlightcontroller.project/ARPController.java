@@ -111,20 +111,20 @@ public class ARPController implements IOFMessageListener, IFloodlightModule {
 			
 			ARP arp = (ARP) eth.getPayload();
 			
-			if(arp.getTargetProtocolAddress().compareTo(Parameters.VRIP) == 0)
-				handleVirtualRequest(sw, pi, cntx);
+			if(arp.getTargetProtocolAddress().compareTo(Parameters.VRIP) == 0)	// Packet for the VR
+				handleVirtualRequest(sw, pi, cntx);		
 			else
-				handleBroadcastRequest(sw, pi, cntx);
+				handleBroadcastRequest(sw, pi, cntx);							// Packet for a node of the network A
 				
 			return Command.STOP;
 			
 		}
 		
-		// Interrupt the chain
 		return Command.CONTINUE;
 			
 	}
 	
+	// Manage only ARP request sent to the VR
 	private void handleVirtualRequest(IOFSwitch sw, OFPacketIn pi, FloodlightContext cntx) {
 		
 		Ethernet eth = IFloodlightProviderService.bcStore.get(cntx,
@@ -136,12 +136,11 @@ public class ARPController implements IOFMessageListener, IFloodlightModule {
 		// Cast the ARP request
 		ARP arp = (ARP) eth.getPayload();
 		
-		// Devo gestire solo le richieste dirette verso il router
 		// IPv4Address src = arp.getSenderProtocolAddress();
 		// IPv4Address dest = arp.getTargetProtocolAddress();
 		logger.info("Managing Virtual ARP Request");
 		
-		IPacket arpReply = new Ethernet()		// Il nodo si comporta come se fosse il nodo e rispondesse all'host che gli ha fatto richiesta
+		IPacket arpReply = new Ethernet()		// Il nodo si comporta come vr e risponde all'host che gli ha fatto richiesta
 				.setSourceMACAddress(Parameters.VRMAC)
 				.setDestinationMACAddress(eth.getSourceMACAddress())
 				.setEtherType(EthType.ARP)
@@ -155,8 +154,8 @@ public class ARPController implements IOFMessageListener, IFloodlightModule {
 					.setOpCode(ARP.OP_REPLY)
 					.setSenderHardwareAddress(Parameters.VRMAC) 	// Set my MAC address
 					.setSenderProtocolAddress(Parameters.VRIP) 		// Set my IP address
-					.setTargetHardwareAddress(arp.getSenderHardwareAddress())	// Setto il MAC dell'host
-					.setTargetProtocolAddress(arp.getSenderProtocolAddress()));	// Setto l'ip dell'host che ha fatto richiesta
+					.setTargetHardwareAddress(arp.getSenderHardwareAddress())	// Set host MAC
+					.setTargetProtocolAddress(arp.getSenderProtocolAddress()));	// Set host IP
 			
 		// Create action -> send the packet back from the source port
 		OFActionOutput.Builder actionBuilder = sw.getOFFactory().actions().buildOutput().setPort(pi.getMatch().get(MatchField.IN_PORT));
@@ -177,6 +176,7 @@ public class ARPController implements IOFMessageListener, IFloodlightModule {
 		
 	}
 	
+	// Manage ARP packets sent to nodes of network A
 	private void handleBroadcastRequest(IOFSwitch sw, OFPacketIn pi, FloodlightContext cntx) {
 		
 		// Double check that the payload is ARP
@@ -194,6 +194,7 @@ public class ARPController implements IOFMessageListener, IFloodlightModule {
         
 	}
 	
+	// Intercept ARP packet (not directed to the VR) and send the packet in broadcast
 	private void addBroadcastFlowRule(IOFSwitch sw, OFPacketIn pi) {
 		
 		OFFlowAdd.Builder flow = sw.getOFFactory().buildFlowAdd();
@@ -237,6 +238,7 @@ public class ARPController implements IOFMessageListener, IFloodlightModule {
  		
 	}
 	
+	// Intercept ARP packet directed to the VR and send the packet to the controller
 	private void addVirtualFlowRule(IOFSwitch sw) {
 		
 		OFFlowAdd.Builder flow = sw.getOFFactory().buildFlowAdd();
